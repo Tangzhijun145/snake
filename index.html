@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>贪吃蛇 · 云对战</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#070b16; --panel:rgba(15,23,42,.82); --line:rgba(56,189,248,.18);
+    --txt:#e2e8f0; --dim:#8ea0bb; --accent:#38bdf8; --gold:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%,#12203c 0%,var(--bg) 60%);
+    color:var(--txt); font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px; overflow:hidden;
+  }
+  header{display:flex;align-items:baseline;gap:10px;flex:0 0 auto}
+  h1{font-size:17px;font-weight:700;letter-spacing:.3px}
+  h1 span{color:#5b708f;font-size:11.5px;font-weight:400}
+  #wrap{
+    position:relative; flex:1 1 auto; width:min(1280px,calc(100vw - 28px));
+    min-height:260px; border-radius:14px; overflow:hidden;
+    border:1px solid var(--line); box-shadow:0 18px 50px -20px #000, inset 0 0 60px rgba(56,189,248,.05);
+  }
+  canvas{display:block;width:100%;height:100%}
+
+  /* ---------- 排行榜 ---------- */
+  #hud{
+    position:absolute;top:10px;right:10px;min-width:186px;max-width:236px;
+    background:var(--panel);backdrop-filter:blur(9px);border:1px solid var(--line);
+    border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.6;
+  }
+  #hud .title{color:var(--dim);font-size:11px;letter-spacing:.6px;margin-bottom:4px}
+  #hud .row{display:flex;justify-content:space-between;gap:10px;align-items:center}
+  #hud .row.me{color:#fff;font-weight:700}
+  #hud .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:112px}
+  #hud .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  #hud .sc{font-variant-numeric:tabular-nums;color:#cbd5e1}
+  #hud .row.me .sc{color:#fff}
+  #hud .k{color:#f87171;font-size:11px}
+  #hud .dd{color:#64748b;font-size:11px}
+
+  /* ---------- 击杀播报 ---------- */
+  #feed{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:4px;font-size:12px;pointer-events:none}
+  #feed div{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 9px;
+    animation:slidein .18s ease-out; max-width:320px;
+  }
+  @keyframes slidein{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+
+  /* ---------- 提示 ---------- */
+  #toast{
+    position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+    font-size:13px;color:var(--gold);text-shadow:0 2px 8px #000;pointer-events:none;
+    opacity:0;transition:opacity .25s
+  }
+  #toast.on{opacity:1}
+
+  /* ---------- 死亡浮层 ---------- */
+  #dead{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:6px;background:radial-gradient(circle at 50% 50%,rgba(127,29,29,.30),rgba(2,6,23,.62));
+    pointer-events:none;text-align:center
+  }
+  #dead.show{display:flex}
+  #dead b{font-size:26px;letter-spacing:1px}
+  #dead span{color:#cbd5e1;font-size:13px}
+
+  /* ---------- 暂停浮层 ---------- */
+  #paused{
+    position:absolute;inset:0;display:none;flex-direction:column;gap:10px;
+    align-items:center;justify-content:center;pointer-events:none;
+    background:rgba(3,7,18,.58);backdrop-filter:blur(2px)
+  }
+  #paused.show{display:flex}
+  #paused .big{font-size:32px;font-weight:800;letter-spacing:6px}
+  #paused .sub{color:#cbd5e1;font-size:13px}
+  #paused .who{color:#8ea0bb;font-size:12px}
+  #paused kbd{
+    background:#16233a;border:1px solid #2b3f5c;border-bottom-width:2px;border-radius:5px;
+    padding:2px 8px;font-family:inherit;font-size:12px;color:#dbeafe
+  }
+
+  /* ---------- 开始页 ---------- */
+  #overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;gap:14px;
+    align-items:center;justify-content:center;background:rgba(3,7,18,.80);backdrop-filter:blur(3px);
+  }
+  #overlay.hidden{display:none}
+  #overlay h2{font-size:24px;letter-spacing:2px}
+  #overlay input{
+    background:#0f1a2e;border:1px solid #2b3f5c;color:var(--txt);border-radius:9px;
+    padding:10px 14px;font-size:15px;width:230px;text-align:center;outline:none
+  }
+  #overlay input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.16)}
+  #overlay button{
+    background:linear-gradient(180deg,#34d399,#16a34a);color:#04220f;border:none;border-radius:9px;
+    padding:11px 40px;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:2px;
+    box-shadow:0 8px 22px -8px #16a34a
+  }
+  #overlay button:hover{filter:brightness(1.08)}
+  #help{color:#93a6c2;font-size:12.5px;line-height:2;text-align:center}
+  #help kbd{
+    background:#16233a;border:1px solid #2b3f5c;border-bottom-width:2px;border-radius:5px;
+    padding:1px 6px;font-family:inherit;font-size:11.5px;color:#dbeafe
+  }
+  #help em{color:var(--gold);font-style:normal}
+
+  /* ---------- 底部状态 ---------- */
+  #stats{
+    flex:0 0 auto;display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:center;align-items:center;
+    font-size:12px;color:var(--dim)
+  }
+  #stats b{color:var(--txt);font-variant-numeric:tabular-nums}
+  #stats .pname{letter-spacing:.5px}
+  .meter{width:88px;height:7px;border-radius:4px;background:#16233a;overflow:hidden;display:inline-block;vertical-align:middle}
+  .meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38bdf8,#a78bfa);transition:width .12s}
+</style>
+</head>
+<body>
+<header>
+  <h1>🐍 贪吃蛇 · 云对战</h1>
+  <span>云端权威判定 · WebSocket 20Hz 同步 · AI Bot</span>
+</header>
+
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div id="hud"></div>
+  <div id="feed"></div>
+  <div id="toast"></div>
+  <div id="dead"></div>
+  <div id="paused">
+    <div class="big">⏸ 已暂停</div>
+    <div class="sub">按 <kbd>ESC</kbd> 或 <kbd>P</kbd> 继续</div>
+    <div class="who" id="pausedBy"></div>
+  </div>
+  <div id="overlay">
+    <h2>加入对战</h2>
+    <input id="name" maxlength="12" placeholder="玩家1昵称（WASD）" autocomplete="off">
+    <input id="name2" maxlength="12" placeholder="玩家2昵称（方向键，留空=单人）" autocomplete="off">
+    <button id="joinBtn">开 始</button>
+    <div id="help">
+      玩家1：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 转向 · <kbd>空格</kbd> / <kbd>左Shift</kbd> 加速冲刺<br>
+      玩家2：<kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 转向 · <kbd>回车</kbd> / <kbd>右Shift</kbd> 加速冲刺<br>
+      <kbd>ESC</kbd> / <kbd>P</kbd> 暂停整局 · 玩家2昵称留空即单人模式（两套按键都有效）<br>
+      撞墙、撞到别人的身体即死，死亡后尸体化为食物、分数清零<br>
+      吃掉 <em>金色食物</em> 得 5 分并快速变长；冲刺会消耗身体并掉落食物
+    </div>
+  </div>
+</div>
+
+<div id="stats">
+  <span>RTT <b id="rtt">-</b></span>
+  <span>同步 <b id="hz">20</b> Hz</span>
+  <span id="pg1"><b class="pname" id="pn1">P1</b> 长度 <b id="len1">-</b> · 得分 <b id="score1">0</b> · 击杀 <b id="kills1">0</b> · 最高 <b id="best1">0</b> <span class="meter" id="meter1"><i></i></span></span>
+  <span id="pg2" style="display:none"><b class="pname" id="pn2">P2</b> 长度 <b id="len2">-</b> · 得分 <b id="score2">0</b> · 击杀 <b id="kills2">0</b> · 最高 <b id="best2">0</b> <span class="meter" id="meter2"><i></i></span></span>
+</div>
+
+<script>
+/* ============================== 常量与状态 ============================== */
+const MIN_BOOST_LEN = 8;
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const hudEl = document.getElementById('hud'), feedEl = document.getElementById('feed'),
+      toastEl = document.getElementById('toast'), deadEl = document.getElementById('dead'),
+      overlayEl = document.getElementById('overlay'), pausedEl = document.getElementById('paused'),
+      pausedByEl = document.getElementById('pausedBy');
+
+let W = 0, H = 0, dpr = 1;
+let ws = null, myIds = [], myNames = [], myColors = [], joined = false, dual = false;
+let grid = [72, 45], tickHz = 20;
+let snaps = [], lastState = null, rtt = null;
+let hzEMA = 0, lastArrival = 0;          // 实测同步频率（对快照到达间隔做指数平滑）
+let paused = false, pausedBy = null;     // 整局暂停（以服务器快照为准，客户端不自行判定）
+// 插值缓冲：必须 ≥ 一个快照间隔才能连续插值，否则会一卡一跳。
+// 取 1.05 帧 + 8ms 的安全余量——原来给的 1.5 帧 + 20ms 相当于白送 95ms 输入延迟。
+let interpDelay = 0;
+const minDelay = () => (1000 / tickHz) * 1.05 + 8;
+let cam = {x: 0, y: 0, init: false}, scale = 14;
+let particles = [], popups = [], lastBodies = {}, nameToId = {};
+let shake = 0;
+
+/* ============================== 画布自适应 ============================== */
+function resize(){
+  const r = cv.parentElement.getBoundingClientRect();
+  W = Math.max(320, Math.floor(r.width));
+  H = Math.max(240, Math.floor(r.height));
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.floor(W * dpr); cv.height = Math.floor(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+
+/* ============================== 音效（WebAudio 合成，无外部文件） ============================== */
+let actx = null, master = null, boostGain = null;
+function initAudio(){
+  if (actx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  actx = new AC();
+  master = actx.createGain(); master.gain.value = 0.30; master.connect(actx.destination);
+  // 冲刺噪声：常驻播放，靠增益开关
+  const buf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
+  const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 780; bp.Q.value = 0.7;
+  boostGain = actx.createGain(); boostGain.gain.value = 0;
+  src.connect(bp); bp.connect(boostGain); boostGain.connect(master); src.start();
+}
+function sfx(freq, dur, type, vol, slideTo){
+  if (!actx) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(30, slideTo), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol || 0.4, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.03);
+}
+function noise(dur, vol){
+  if (!actx) return;
+  const n = Math.floor(actx.sampleRate * dur);
+  const buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = actx.createBufferSource(); src.buffer = buf;
+  const g = actx.createGain(); g.gain.value = vol || 0.35;
+  src.connect(g); g.connect(master); src.start();
+}
+function setBoostAudio(on){
+  if (!actx || !boostGain) return;
+  const t = actx.currentTime;
+  boostGain.gain.cancelScheduledValues(t);
+  boostGain.gain.setTargetAtTime(on ? 0.17 : 0, t, 0.06);
+}
+
+/* ============================== 网络 ============================== */
+function send(o){ if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+
+function connect(){
+  ws = new WebSocket('ws://' + location.hostname + ':8765');
+  ws.onopen = () => {
+    if (joined) {
+      const j = {type: 'join', name: myNames[0]};
+      if (dual) j.name2 = myNames[1];
+      send(j);
+    }
+  };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'welcome') {
+      myIds = m.ids || [m.id];
+      myColors = m.colors || [m.color];
+      dual = myIds.length > 1;
+      document.getElementById('pg2').style.display = dual ? '' : 'none';
+      for (let i = 0; i < myIds.length; i++)
+        document.getElementById('pn' + (i + 1)).style.color = myColors[i] || '#fff';
+      grid = m.grid || grid; tickHz = m.tick_rate || 20;
+      snaps = []; cam.init = false; hzEMA = 0; lastArrival = 0;
+      document.getElementById('hz').textContent = tickHz;
+      overlayEl.classList.add('hidden');
+      clearInterval(connect._ping);
+      connect._ping = setInterval(() => send({type: 'ping', t: performance.now()}), 1000);
+    } else if (m.type === 'state') {
+      onState(m);
+    } else if (m.type === 'pong') {
+      rtt = performance.now() - m.t;
+      document.getElementById('rtt').textContent = Math.round(rtt) + ' ms';
+    }
+  };
+  ws.onclose = () => {
+    document.getElementById('rtt').textContent = '断开';
+    if (joined) setTimeout(connect, 1300);   // 断线自动重连
+  };
+}
+
+/* 暂停状态由服务器下发：任何玩家按 ESC/P 都会暂停整局，本地不自行判定 */
+function setPaused(on, by){
+  paused = on; pausedBy = by || null;
+  pausedEl.classList.toggle('show', on);
+  pausedByEl.textContent = by ? '由 ' + by + ' 暂停' : '';
+  if (on) { setBoost(0, false); setBoost(1, false); }   // 暂停时收掉冲刺音效并复位按键状态
+}
+
+function onState(m){
+  lastState = m;
+  setPaused(!!m.paused, m.paused_by);
+  const now = performance.now();
+  const base = 1000 / tickHz;
+  // 暂停时服务器只发 5Hz 心跳，不参与频率统计，也不触发抖动加缓冲
+  if (lastArrival && !m.paused) {
+    const dt = now - lastArrival;         // 实测同步频率：到达间隔的指数滑动平均
+    if (dt > 1 && dt < 400) hzEMA = hzEMA ? hzEMA * 0.9 + (1000 / dt) * 0.1 : 1000 / dt;
+    // 快照迟到（网络抖动）时临时加大缓冲，平时缓慢回收，避免卡顿
+    if (dt > base * 1.6) interpDelay = Math.min(base * 3, interpDelay + 25);
+  }
+  lastArrival = now;
+  interpDelay = Math.max(interpDelay, minDelay());
+  snaps.push({t: now, players: m.players, food: m.food});
+  while (snaps.length > 12) snaps.shift();
+
+  nameToId = {};
+  for (const p of m.players) {
+    nameToId[p.name] = p.id;
+    if (p.alive && p.body.length) lastBodies[p.id] = p.body;
+  }
+  if (m.events) for (const ev of m.events) handleEvent(ev);
+  updateHud(m);
+}
+
+/* ============================== 事件 → 特效/音效 ============================== */
+function handleEvent(ev){
+  const isMe = myNames.indexOf(ev.name) >= 0;      // 事件是否属于本机任一玩家
+  if (ev.type === 'eat') {
+    const gold = ev.kind === 'gold';
+    spawnBurst(ev.x, ev.y, gold ? '#fbbf24' : '#f87171', gold ? 16 : 6, gold ? 5 : 2.4);
+    popups.push({x: ev.x, y: ev.y, text: '+' + ev.score, life: 1, color: gold ? '#fbbf24' : '#e2e8f0'});
+    if (ev.kind === 'gold') { sfx(660, .18, 'triangle', .5, 1320); setTimeout(() => sfx(990, .22, 'triangle', .45, 1480), 70); }
+    else if (isMe) sfx(520 + Math.min(240, ev.score * 8), .07, 'square', .28, 720);
+    else sfx(360, .05, 'sine', .10);
+  } else if (ev.type === 'die') {
+    const body = lastBodies[nameToId[ev.name]] || [];
+    const col = (lastState.players.find(p => p.name === ev.name) || {}).color || '#94a3b8';
+    for (const c of body) spawnBurst(c[0], c[1], col, 2, 2.2);
+    if (isMe) { shake = 16; noise(.35, .35); sfx(240, .5, 'sawtooth', .35, 60); }
+    else if (ev.killer && myIds.includes(ev.killer)) { sfx(880, .12, 'triangle', .5, 1500);
+                setTimeout(() => sfx(1320, .16, 'triangle', .4), 90); shake = Math.max(shake, 7); }
+  } else if (ev.type === 'kill') {
+    feed(myNames.includes(ev.name) ? `🔥 你 击杀了 ${ev.target}` : `🔥 ${ev.name} 击杀了 ${ev.target}`);
+  } else if (ev.type === 'gold') {
+    toast('✨ 金食物出现');
+  } else if (ev.type === 'join') {
+    feed(`👋 ${ev.name} 加入`);
+  } else if (ev.type === 'leave') {
+    feed(`${ev.name} 离开`);
+  }
+}
+let toastTimer = null;
+function toast(t){
+  toastEl.textContent = t; toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('on'), 2200);
+}
+function feed(t){
+  const d = document.createElement('div');
+  d.textContent = t; feedEl.appendChild(d);
+  setTimeout(() => d.remove(), 3600);
+  while (feedEl.childElementCount > 5) feedEl.firstChild.remove();
+}
+
+/* ============================== 粒子 / 飘字 ============================== */
+function spawnBurst(x, y, color, n, spread){
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = spread * (0.35 + Math.random());
+    particles.push({x: x + .5, y: y + .5, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                    life: 1, decay: 1 / (0.45 + Math.random() * 0.5),
+                    color, size: 0.09 + Math.random() * 0.15});
+  }
+}
+function updateFx(dt){
+  const damp = Math.exp(-3.6 * dt);
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= damp; p.vy *= damp;
+    p.life -= p.decay * dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = popups.length - 1; i >= 0; i--) {
+    const q = popups[i]; q.y -= dt * 1.1; q.life -= dt * 1.1;
+    if (q.life <= 0) popups.splice(i, 1);
+  }
+  shake = Math.max(0, shake - dt * 34);
+}
+
+/* ============================== 插值采样 ============================== */
+function sampleState(){
+  if (!snaps.length) return null;
+  if (snaps.length === 1) return {a: snaps[0], b: snaps[0], k: 1};
+  const rt = performance.now() - interpDelay;
+  let a = snaps[0], b = snaps[1];
+  for (let i = snaps.length - 2; i >= 0; i--) {
+    if (snaps[i].t <= rt) { a = snaps[i]; b = snaps[i + 1]; break; }
+  }
+  const span = Math.max(1, b.t - a.t);
+  let k = (rt - a.t) / span;
+  k = k < 0 ? 0 : (k > 1 ? 1 : k);
+  return {a, b, k};
+}
+
+/* 按索引插值：新快照第 i 节 = 旧快照第 i-1 节 → 整条蛇向前滑动一格 */
+function buildPlayers(s){
+  const amap = {};
+  for (const p of s.a.players) amap[p.id] = p;
+  const out = [];
+  for (const pb of s.b.players) {
+    const pa = amap[pb.id], p = Object.assign({}, pb);
+    if (pb.alive && pa && pa.alive && pa.body.length && pb.body.length) {
+      const n = Math.min(pa.body.length, pb.body.length), body = [];
+      for (let i = 0; i < n; i++)
+        body.push([pa.body[i][0] + (pb.body[i][0] - pa.body[i][0]) * s.k,
+                   pa.body[i][1] + (pb.body[i][1] - pa.body[i][1]) * s.k]);
+      for (let i = n; i < pb.body.length; i++) body.push(pb.body[i].slice());
+      p.body = body;
+    } else {
+      p.body = pb.alive ? pb.body.map(c => c.slice()) : [];
+    }
+    out.push(p);
+  }
+  return out;
+}
+
+/* ============================== 颜色工具 ============================== */
+function hx(h){
+  h = h.replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+function mix(a, b, t){
+  const A = hx(a), B = hx(b);
+  return 'rgb(' + Math.round(A[0]+(B[0]-A[0])*t) + ',' + Math.round(A[1]+(B[1]-A[1])*t) + ',' +
+         Math.round(A[2]+(B[2]-A[2])*t) + ')';
+}
+
+/* ============================== 渲染 ============================== */
+let OXX = 0, OYY = 0;
+const SX = x => x * scale + OXX;
+const SY = y => y * scale + OYY;
+
+function strokePath(pts, lw){
+  if (pts.length === 1) {
+    ctx.beginPath(); ctx.arc(pts[0][0], pts[0][1], lw / 2, 0, 7);
+    ctx.fillStyle = ctx.strokeStyle; ctx.fill(); return;
+  }
+  ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke();
+}
+
+function drawSnake(p, isMe, slot){
+  const body = p.body;
+  if (!body || !body.length) return;
+  const pts = body.map(c => [SX(c[0] + .5), SY(c[1] + .5)]);
+  const w = Math.max(3, scale * 0.76);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  if (p.boost) {                                    // 冲刺光晕
+    ctx.globalAlpha = .28; ctx.strokeStyle = '#fff'; ctx.lineWidth = w * 2.3;
+    strokePath(pts, w * 2.3); ctx.globalAlpha = 1;
+  }
+  ctx.globalAlpha = .18; ctx.strokeStyle = p.color; ctx.lineWidth = w * 1.8;
+  strokePath(pts, w * 1.8); ctx.globalAlpha = 1;    // 外发光
+
+  const g = ctx.createLinearGradient(pts[0][0], pts[0][1], pts[pts.length-1][0] || pts[0][0],
+                                     pts[pts.length-1][1] || pts[0][1]);
+  g.addColorStop(0, mix(p.color, '#ffffff', .40));
+  g.addColorStop(.22, p.color);
+  g.addColorStop(1, mix(p.color, '#050912', .55));
+  ctx.strokeStyle = g; ctx.lineWidth = w; strokePath(pts, w);
+
+  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = w * .32;
+  strokePath(pts, w * .32);                         // 高光
+
+  // 蛇头 + 眼睛
+  const c = pts[0];
+  let dx = 1, dy = 0;
+  if (body.length > 1) { dx = body[0][0] - body[1][0]; dy = body[0][1] - body[1][1]; }
+  const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+  const px = -dy, py = dx, eo = w * .23, ef = w * .15, r = Math.max(1.3, w * .155);
+  ctx.fillStyle = mix(p.color, '#ffffff', .28);
+  ctx.beginPath(); ctx.arc(c[0], c[1], w * .53, 0, 7); ctx.fill();
+  const eyes = [[c[0]+px*eo+dx*ef, c[1]+py*eo+dy*ef], [c[0]-px*eo+dx*ef, c[1]-py*eo+dy*ef]];
+  for (const e of eyes) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(e[0], e[1], r, 0, 7); ctx.fill(); }
+  for (const e of eyes) {
+    ctx.fillStyle = '#0b1120'; ctx.beginPath();
+    ctx.arc(e[0] + dx * r * .45, e[1] + dy * r * .45, r * .52, 0, 7); ctx.fill();
+  }
+  if (isMe) {
+    ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = Math.max(1.4, w * .1);
+    ctx.beginPath(); ctx.arc(c[0], c[1], w * .66, 0, 7); ctx.stroke();
+  }
+  // 名字（本机蛇带 1P/2P 前缀）
+  const label = (isMe && dual ? (slot ? '2P·' : '1P·') : '') +
+                p.name + (p.kills ? ' ×' + p.kills : '') + (p.boost ? ' ⚡' : '');
+  ctx.font = '700 ' + Math.max(10, Math.min(15, scale * .70)) + 'px "Segoe UI","Microsoft YaHei",sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  const ty = c[1] - scale * .85;
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(3,7,18,.85)'; ctx.strokeText(label, c[0], ty);
+  ctx.fillStyle = isMe ? '#fff' : 'rgba(226,232,240,.8)'; ctx.fillText(label, c[0], ty);
+}
+
+function render(dt){
+  interpDelay = Math.max(minDelay(), interpDelay - 60 * dt);   // 缓慢回收抖动缓冲
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#070b16'; ctx.fillRect(0, 0, W, H);
+  const s = sampleState();
+  if (!s) return;
+  const players = buildPlayers(s);
+  const foods = s.b.food || [];
+
+  // 镜头：单人跟随蛇头；双人同屏取两条蛇的中点，并按蛇头间距拉开视野，
+  // 保证两条蛇都留在画面内（不小于最小缩放，越界由下面的边界钳制兜底）
+  const mine = players.filter(p => myIds.includes(p.id));
+  const ours = mine.filter(p => p.alive && p.body.length);
+  const maxLen = Math.max(4, ...mine.map(p => p.len || 0));
+  if (ours.length >= 2) {
+    const ax = ours[0].body[0][0] + .5, ay = ours[0].body[0][1] + .5;
+    const bx = ours[1].body[0][0] + .5, by = ours[1].body[0][1] + .5;
+    const base = W / (40 + Math.min(20, Math.max(0, maxLen - 10) * .4));
+    const fitX = (W - 70) / Math.max(8, Math.abs(ax - bx) + 14);
+    const fitY = (H - 70) / Math.max(8, Math.abs(ay - by) + 14);
+    if (!cam.init) { cam.x = (ax + bx) / 2; cam.y = (ay + by) / 2; cam.init = true; }
+    const f = Math.min(1, dt * 7.5);
+    cam.x += ((ax + bx) / 2 - cam.x) * f;
+    cam.y += ((ay + by) / 2 - cam.y) * f;
+    scale += (Math.max(5, Math.min(base, fitX, fitY)) - scale) * Math.min(1, dt * 4);
+  } else if (ours.length === 1) {
+    if (!cam.init) { cam.x = ours[0].body[0][0] + .5; cam.y = ours[0].body[0][1] + .5; cam.init = true; }
+    const f = Math.min(1, dt * 7.5);
+    cam.x += (ours[0].body[0][0] + .5 - cam.x) * f;
+    cam.y += (ours[0].body[0][1] + .5 - cam.y) * f;
+    scale += (W / (40 + Math.min(20, Math.max(0, maxLen - 10) * .4)) - scale) * Math.min(1, dt * 4);
+  }
+  if (!cam.init) { cam.x = grid[0] / 2; cam.y = grid[1] / 2; cam.init = true; }
+  const halfW = W / 2 / scale, halfH = H / 2 / scale;
+  cam.x = grid[0] <= halfW * 2 ? grid[0] / 2 : Math.min(Math.max(cam.x, halfW), grid[0] - halfW);
+  cam.y = grid[1] <= halfH * 2 ? grid[1] / 2 : Math.min(Math.max(cam.y, halfH), grid[1] - halfH);
+  OXX = W / 2 - cam.x * scale; OYY = H / 2 - cam.y * scale;
+
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
+
+  const x0 = Math.max(0, Math.floor(cam.x - halfW)), x1 = Math.min(grid[0], Math.ceil(cam.x + halfW));
+  const y0 = Math.max(0, Math.floor(cam.y - halfH)), y1 = Math.min(grid[1], Math.ceil(cam.y + halfH));
+
+  // 网格
+  if (scale >= 8) {
+    ctx.strokeStyle = 'rgba(56,189,248,.055)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = x0; x <= x1; x++) { ctx.moveTo(SX(x), SY(y0)); ctx.lineTo(SX(x), SY(y1)); }
+    for (let y = y0; y <= y1; y++) { ctx.moveTo(SX(x0), SY(y)); ctx.lineTo(SX(x1), SY(y)); }
+    ctx.stroke();
+  }
+  // 场地边界
+  ctx.strokeStyle = 'rgba(56,189,248,.42)'; ctx.lineWidth = 2.5;
+  ctx.strokeRect(SX(0), SY(0), grid[0] * scale, grid[1] * scale);
+  ctx.strokeStyle = 'rgba(56,189,248,.10)'; ctx.lineWidth = 9;
+  ctx.strokeRect(SX(0), SY(0), grid[0] * scale, grid[1] * scale);
+
+  // 食物
+  const pulse = .5 + .5 * Math.sin(performance.now() / 220);
+  for (const f of foods) {
+    if (f.x < x0 - 1 || f.x > x1 + 1 || f.y < y0 - 1 || f.y > y1 + 1) continue;
+    const cx = SX(f.x + .5), cy = SY(f.y + .5), gold = f.kind === 'gold';
+    const base = gold ? .40 : .26;
+    const r = scale * base * (1 + (gold ? .18 : .07) * pulse);
+    ctx.globalAlpha = .30; ctx.fillStyle = gold ? '#fbbf24' : '#ef4444';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 2.1, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = gold ? '#fcd34d' : '#f87171';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.75)';
+    ctx.beginPath(); ctx.arc(cx - r * .3, cy - r * .3, r * .34, 0, 7); ctx.fill();
+  }
+
+  // 蛇（本机玩家最后画，压在别人上面）
+  for (const p of players) if (p.alive && !myIds.includes(p.id)) drawSnake(p, false);
+  for (let i = 0; i < myIds.length; i++) {
+    const me = players.find(p => p.id === myIds[i]);
+    if (me && me.alive) drawSnake(me, true, i);
+  }
+
+  // 粒子
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life) * .9;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(SX(p.x), SY(p.y), Math.max(1, p.size * scale), 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // 飘字
+  ctx.font = '800 ' + Math.max(11, Math.min(17, scale * .85)) + 'px "Segoe UI","Microsoft YaHei",sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const q of popups) {
+    ctx.globalAlpha = Math.max(0, q.life);
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(3,7,18,.9)';
+    ctx.strokeText(q.text, SX(q.x + .5), SY(q.y + .5));
+    ctx.fillStyle = q.color; ctx.fillText(q.text, SX(q.x + .5), SY(q.y + .5));
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+/* ============================== HUD ============================== */
+function updateHud(m){
+  if (!paused) document.getElementById('hz').textContent = hzEMA ? hzEMA.toFixed(1) : tickHz;
+  // 每个本机玩家一份状态；死亡浮层按存活状态逐帧刷新（两人各自独立显示倒计时）
+  const deadLines = [];
+  let anyBoost = false;
+  for (let i = 0; i < myIds.length; i++) {
+    const me = m.players.find(p => p.id === myIds[i]);
+    if (!me) continue;
+    const g = i + 1;
+    document.getElementById('len' + g).textContent = me.len;
+    document.getElementById('score' + g).textContent = me.score;
+    document.getElementById('kills' + g).textContent = me.kills;
+    document.getElementById('best' + g).textContent = me.best;
+    const ok = me.len > MIN_BOOST_LEN && me.alive;
+    document.querySelector('#meter' + g + ' i').style.width = ok ? '100%' : '0';
+    if (!me.alive)
+      deadLines.push('💀 ' + (dual ? (i ? '2P' : '1P') + '·' : '') + me.name +
+                     ' · ' + (me.respawn_in ? me.respawn_in.toFixed(1) : '0') + 's 后重生');
+    else if (boostOn[i] && ok) anyBoost = true;
+  }
+  if (deadLines.length) { deadEl.innerHTML = deadLines.join('<br>'); deadEl.classList.add('show'); }
+  else deadEl.classList.remove('show');
+  setBoostAudio(!paused && anyBoost);
+  const sorted = m.players.slice().sort((a, b) => b.score - a.score || b.kills - a.kills);
+  let html = '<div class="title">🏆 排行榜 / ' + m.players.length + ' 人</div>';
+  for (const p of sorted.slice(0, 8)) {
+    html += '<div class="row' + (myIds.includes(p.id) ? ' me' : '') + '">' +
+              '<span class="nm"><span class="dot" style="background:' + p.color + '"></span>' +
+              (p.bot ? '🤖 ' : '') + p.name + '</span>' +
+              '<span class="sc">' + p.score + (p.kills ? ' <span class="k">☠' + p.kills + '</span>' : '') +
+              (p.alive ? '' : ' <span class="dd">重生</span>') + '</span></div>';
+  }
+  if (hudEl._last !== html) { hudEl.innerHTML = html; hudEl._last = html; }
+}
+
+/* ============================== 输入 ============================== */
+// 用 e.code（物理键位）而非 e.key：中文输入法组合态下 e.key 会变成 "Process"，
+// WASD 会整个失效；e.code 不受输入法与键盘布局影响。
+// 双人同屏：玩家1 WASD+空格/左Shift，玩家2 方向键+回车/右Shift；单人时两套按键都控制同一条蛇。
+const P1MAP = {KeyW: [0,-1], KeyS: [0,1], KeyA: [-1,0], KeyD: [1,0]};
+const P2MAP = {ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0]};
+let boostOn = [false, false], boostSent = [false, false];
+function setBoost(slot, on){
+  boostOn[slot] = on;
+  if (on !== boostSent[slot]) { boostSent[slot] = on; send({type: 'boost', on, slot}); }
+  setBoostAudio(boostOn.some(Boolean));
+  if (on) sfx(300, .12, 'sawtooth', .18, 900);
+}
+document.addEventListener('keydown', e => {
+  if (e.code === 'Escape' || e.code === 'KeyP') {   // 暂停 / 继续整局
+    e.preventDefault(); send({type: 'pause', on: !paused}); return;
+  }
+  if (paused) return;                               // 暂停期间不接受方向与冲刺输入
+  if (dual) {
+    if (P1MAP[e.code]) { e.preventDefault(); send({type: 'dir', dx: P1MAP[e.code][0], dy: P1MAP[e.code][1], slot: 0}); return; }
+    if (P2MAP[e.code]) { e.preventDefault(); send({type: 'dir', dx: P2MAP[e.code][0], dy: P2MAP[e.code][1], slot: 1}); return; }
+    if (e.code === 'Space' || e.code === 'ShiftLeft')  { e.preventDefault(); setBoost(0, true); return; }
+    if (e.code === 'Enter' || e.code === 'ShiftRight') { e.preventDefault(); setBoost(1, true); return; }
+  } else {
+    const d = P1MAP[e.code] || P2MAP[e.code];
+    if (d) { e.preventDefault(); send({type: 'dir', dx: d[0], dy: d[1], slot: 0}); return; }
+    if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'Enter') {
+      e.preventDefault(); setBoost(0, true);
+    }
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.code === 'ShiftLeft') setBoost(0, false);
+  else if (e.code === 'Enter' || e.code === 'ShiftRight') setBoost(dual ? 1 : 0, false);
+});
+window.addEventListener('blur', () => { setBoost(0, false); setBoost(1, false); });
+
+/* ============================== 启动 ============================== */
+function join(){
+  myNames = [(document.getElementById('name').value.trim() || '玩家').slice(0, 12)];
+  const n2 = document.getElementById('name2').value.trim().slice(0, 12);
+  dual = !!n2;
+  if (dual) myNames.push(n2 === myNames[0] ? n2 + '2' : n2);
+  document.getElementById('name').blur();   // 输入框保留焦点会吃掉方向键
+  document.getElementById('name2').blur();
+  initAudio();
+  if (actx && actx.state === 'suspended') actx.resume();
+  joined = true;
+  const j = {type: 'join', name: myNames[0]};
+  if (dual) j.name2 = myNames[1];
+  if (ws && ws.readyState === 1) send(j);
+  else connect();
+}
+document.getElementById('joinBtn').onclick = join;
+for (const id of ['name', 'name2'])
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+
+const params = new URLSearchParams(location.search);
+const urlName = params.get('name');
+if (urlName) {
+  document.getElementById('name').value = urlName;
+  document.getElementById('name2').value = params.get('name2') || '';
+  join();
+}
+
+let lastT = performance.now();
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  updateFx(dt);
+  render(dt);
+}
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
